@@ -280,6 +280,3 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 
 MIT © [Leandro de Lara](https://github.com/Ledelara)
 
----
-
-Developed with ❤️ at [Cogna](https://www.cogna.com.br)
