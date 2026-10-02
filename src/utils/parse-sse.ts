@@ -64,12 +64,13 @@ export function parseSSEChunk<T>(
         case 'id':
           id = value;
           break;
-        case 'retry':
+        case 'retry': {
           const retryValue = parseInt(value, 10);
           if (!isNaN(retryValue)) {
             retry = retryValue;
           }
           break;
+        }
       }
     }
 
