@@ -1,8 +1,8 @@
-# react-use-sse
+# @ledelara/use-sse
 
-[![npm version](https://img.shields.io/npm/v/react-use-sse.svg)](https://www.npmjs.com/package/react-use-sse)
-[![npm downloads](https://img.shields.io/npm/dm/react-use-sse.svg)](https://www.npmjs.com/package/react-use-sse)
-[![license](https://img.shields.io/npm/l/react-use-sse.svg)](https://github.com/Ledelara/react-use-sse/blob/main/LICENSE)
+[![npm version](https://img.shields.io/npm/v/@ledelara/use-sse.svg)](https://www.npmjs.com/package/@ledelara/use-sse)
+[![npm downloads](https://img.shields.io/npm/dm/@ledelara/use-sse.svg)](https://www.npmjs.com/package/@ledelara/use-sse)
+[![license](https://img.shields.io/npm/l/@ledelara/use-sse.svg)](https://github.com/Ledelara/react-use-sse/blob/main/LICENSE)
 
 React hook for consuming Server-Sent Events (SSE) with TypeScript support, auto-reconnection, and multiple adapter strategies.
 
@@ -21,21 +21,21 @@ React hook for consuming Server-Sent Events (SSE) with TypeScript support, auto-
 ## Installation
 
 ```bash
-npm install react-use-sse
+npm install @ledelara/use-sse
 ```
 
 ```bash
-yarn add react-use-sse
+yarn add @ledelara/use-sse
 ```
 
 ```bash
-pnpm add react-use-sse
+pnpm add @ledelara/use-sse
 ```
 
 ## Quick Start
 
 ```tsx
-import { useSSE } from 'react-use-sse';
+import { useSSE } from '@ledelara/use-sse';
 
 interface Notification {
   id: string;
@@ -235,7 +235,7 @@ const { data } = useSSE({
 For advanced use cases, you can use the adapters directly:
 
 ```typescript
-import { createNativeAdapter, createFetchAdapter } from 'react-use-sse';
+import { createNativeAdapter, createFetchAdapter } from '@ledelara/use-sse';
 
 const adapter = createFetchAdapter({
   url: '/api/events',
@@ -258,7 +258,7 @@ adapter.disconnect();
 ### SSE Parser Utilities
 
 ```typescript
-import { parseSSEChunk, parseSSEEvent } from 'react-use-sse';
+import { parseSSEChunk, parseSSEEvent } from '@ledelara/use-sse';
 
 const chunk = 'event: update\ndata: {"value": 42}\n\n';
 const events = parseSSEChunk(chunk);
