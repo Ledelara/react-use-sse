@@ -278,5 +278,5 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 
 ## License
 
-MIT © [Leandro de Lara](https://github.com/Ledelara)
+MIT © Leandro de Lara
 

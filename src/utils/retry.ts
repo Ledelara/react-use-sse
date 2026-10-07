@@ -48,13 +48,8 @@ export function calculateRetryDelay(
 ): number {
   const { delay, backoffMultiplier, maxDelay } = config;
 
-  // Backoff exponencial
   const exponentialDelay = delay * Math.pow(backoffMultiplier, attempt);
-
-  // Aplica o limite máximo
   const cappedDelay = Math.min(exponentialDelay, maxDelay);
-
-  // Adiciona jitter (±10%) para evitar thundering herd
   const jitter = cappedDelay * 0.1 * (Math.random() * 2 - 1);
 
   return Math.round(cappedDelay + jitter);

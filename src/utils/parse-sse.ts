@@ -21,8 +21,6 @@ export function parseSSEChunk<T>(
   parser: (raw: string) => T = JSON.parse
 ): SSEEvent<T>[] {
   const events: SSEEvent<T>[] = [];
-
-  // SSE eventos são separados por linhas vazias
   const rawEvents = chunk.split(/\n\n+/);
 
   for (const rawEvent of rawEvents) {
@@ -36,18 +34,15 @@ export function parseSSEChunk<T>(
     let retry: number | undefined;
 
     for (const line of lines) {
-      // Comentários começam com ':'
       if (line.startsWith(':')) continue;
 
       const colonIndex = line.indexOf(':');
 
       if (colonIndex === -1) {
-        // Linha sem ':', trata como campo sem valor
         continue;
       }
 
       const field = line.slice(0, colonIndex);
-      // Remove espaço após ':' se existir
       let value = line.slice(colonIndex + 1);
       if (value.startsWith(' ')) {
         value = value.slice(1);
@@ -58,7 +53,6 @@ export function parseSSEChunk<T>(
           event = value;
           break;
         case 'data':
-          // Múltiplas linhas de data são concatenadas com newline
           data = data ? `${data}\n${value}` : value;
           break;
         case 'id':
@@ -74,13 +68,11 @@ export function parseSSEChunk<T>(
       }
     }
 
-    // Só adiciona se tiver dados
     if (data) {
       try {
         const parsedData = parser(data);
         events.push({ event, data: parsedData, id, retry });
       } catch {
-        // Se o parser falhar, tenta enviar como string
         events.push({ event, data: data as T, id, retry });
       }
     }
