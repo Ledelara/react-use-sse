@@ -70,8 +70,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
 
   // Se headers foi definido, força método fetch
   const method = headers ? 'fetch' : methodOption;
-
-  // Normaliza configuração de reconexão
   const reconnectConfig = normalizeReconnectConfig(reconnectOption);
 
   // Estados
@@ -82,21 +80,16 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
   const [lastEventId, setLastEventId] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
-  // Refs para evitar stale closures
   const adapterRef = useRef<SSEAdapter | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectConfigRef = useRef<Required<SSEReconnectConfig>>(reconnectConfig);
   const retryCountRef = useRef(0);
   const isManualDisconnectRef = useRef(false);
 
-  // Atualiza ref da config de reconexão
   useEffect(() => {
     reconnectConfigRef.current = reconnectConfig;
   }, [reconnectConfig]);
 
-  /**
-   * Limpa timeout de reconexão
-   */
   const clearReconnectTimeout = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -104,9 +97,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     }
   }, []);
 
-  /**
-   * Agenda uma tentativa de reconexão
-   */
   const scheduleReconnect = useCallback(() => {
     const config = reconnectConfigRef.current;
     const attempt = retryCountRef.current;
@@ -116,7 +106,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
       return;
     }
 
-    // Callback de reconexão - permite cancelar
     if (onReconnect) {
       const shouldContinue = onReconnect(attempt);
       if (shouldContinue === false) {
@@ -135,9 +124,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     }, delay);
   }, [onReconnect]);
 
-  /**
-   * Callbacks para o adapter
-   */
   const callbacks = useCallback(
     () => ({
       onOpen: () => {
@@ -158,7 +144,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
         onError?.(err);
       },
       onClose: () => {
-        // Só tenta reconectar se não foi desconexão manual
         if (!isManualDisconnectRef.current && reconnectConfigRef.current.enabled) {
           scheduleReconnect();
         } else {
@@ -170,9 +155,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     [onOpen, onMessage, onError, onClose, scheduleReconnect]
   );
 
-  /**
-   * Cria o adapter apropriado
-   */
   const createAdapter = useCallback(() => {
     const adapterOptions = {
       url,
@@ -188,14 +170,10 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
       : createFetchAdapter(adapterOptions);
   }, [url, events, headers, withCredentials, parser, method, callbacks]);
 
-  /**
-   * Conecta ao endpoint SSE
-   */
   const connect = useCallback(() => {
     isManualDisconnectRef.current = false;
     clearReconnectTimeout();
 
-    // Desconecta adapter existente
     if (adapterRef.current) {
       adapterRef.current.disconnect();
     }
@@ -203,15 +181,11 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     setStatus('connecting');
     setError(null);
 
-    // Cria e conecta novo adapter
     const adapter = createAdapter();
     adapterRef.current = adapter;
     adapter.connect();
   }, [createAdapter, clearReconnectTimeout]);
 
-  /**
-   * Desconecta do endpoint SSE
-   */
   const disconnect = useCallback(() => {
     isManualDisconnectRef.current = true;
     clearReconnectTimeout();
@@ -224,9 +198,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     setStatus('closed');
   }, [clearReconnectTimeout]);
 
-  /**
-   * Effect para conectar/desconectar baseado em `enabled`
-   */
   useEffect(() => {
     if (enabled) {
       connect();

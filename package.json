@@ -4,14 +4,6 @@
   "description": "React hook for Server-Sent Events (SSE) with TypeScript support, auto-reconnection, and multiple adapter strategies",
   "author": "Leandro de Lara <ledelara@github.com>",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Ledelara/react-use-sse.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Ledelara/react-use-sse/issues"
-  },
-  "homepage": "https://github.com/Ledelara/react-use-sse#readme",
   "keywords": [
     "react",
     "hook",
