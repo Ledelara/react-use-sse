@@ -1,7 +1,4 @@
-// Hook principal
 export { useSSE } from './useSSE';
-
-// Tipos
 export type {
   SSEStatus,
   SSEMethod,
@@ -14,10 +11,8 @@ export type {
   SSEAdapterOptions,
 } from './types';
 
-// Adapters (para uso avançado)
-export { createNativeAdapter, createFetchAdapter } from './adapters';
-
-// Utilitários (para uso avançado)
+export { SSE_STATUS, SSE_READY_STATE } from './types';
+export { createNativeAdapter, createFetchAdapter, SSEHttpError } from './adapters';
 export { parseSSEChunk, parseSSEEvent } from './utils/parse-sse';
 export {
   DEFAULT_RECONNECT_CONFIG,

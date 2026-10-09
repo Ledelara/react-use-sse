@@ -61,6 +61,11 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     withCredentials = false,
     reconnect: reconnectOption = true,
     parser = JSON.parse,
+    signal,
+    httpMethod = 'GET',
+    body,
+    connectionTimeout,
+    idleTimeout,
     onMessage,
     onError,
     onOpen,
@@ -68,7 +73,8 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     onReconnect,
   } = options;
 
-  const method = headers ? 'fetch' : methodOption;
+  // Se headers, httpMethod POST ou body foi definido, força método fetch
+  const method = headers || httpMethod === 'POST' || body ? 'fetch' : methodOption;
   const reconnectConfig = normalizeReconnectConfig(reconnectOption);
 
   // Estados
@@ -82,6 +88,8 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
   // Refs
   const adapterRef = useRef<SSEAdapter | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectConfigRef = useRef<Required<SSEReconnectConfig>>(reconnectConfig);
   const retryCountRef = useRef(0);
   const isManualDisconnectRef = useRef(false);
@@ -118,15 +126,47 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     }
   }, []);
 
+  const clearConnectionTimeout = useCallback(() => {
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearIdleTimeout = useCallback(() => {
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+      idleTimeoutRef.current = null;
+    }
+  }, []);
+
+  const resetIdleTimeout = useCallback(() => {
+    clearIdleTimeout();
+    if (idleTimeout && idleTimeout > 0) {
+      idleTimeoutRef.current = setTimeout(() => {
+        // Conexão inativa - força reconexão
+        if (adapterRef.current && !isManualDisconnectRef.current) {
+          const idleError = new Error(`Connection idle for ${idleTimeout}ms`);
+          idleError.name = 'IdleTimeoutError';
+          onErrorRef.current?.(idleError);
+          adapterRef.current.disconnect();
+        }
+      }, idleTimeout);
+    }
+  }, [idleTimeout, clearIdleTimeout]);
+
   const createCallbacks = useCallback(() => ({
     onOpen: () => {
+      clearConnectionTimeout();
       setStatus('connected');
       setError(null);
       retryCountRef.current = 0;
       setRetryCount(0);
+      resetIdleTimeout();
       onOpenRef.current?.();
     },
     onMessage: (event: string, eventData: T, id?: string) => {
+      resetIdleTimeout();
       setData(eventData);
       setLastEvent(event);
       if (id) {
@@ -136,13 +176,17 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
       onMessageRef.current?.(event, eventData);
     },
     onError: (err: Error) => {
+      clearConnectionTimeout();
+      clearIdleTimeout();
       setError(err);
       onErrorRef.current?.(err);
     },
     onClose: () => {
+      clearConnectionTimeout();
+      clearIdleTimeout();
       onCloseRef.current?.();
     },
-  }), []);
+  }), [clearConnectionTimeout, clearIdleTimeout, resetIdleTimeout]);
 
   const scheduleReconnect = useCallback(() => {
     const config = reconnectConfigRef.current;
@@ -178,6 +222,8 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
         headers,
         withCredentials,
         parser,
+        httpMethod,
+        body,
         callbacks: {
           ...createCallbacks(),
           onClose: () => {
@@ -204,6 +250,8 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
   const connect = useCallback(() => {
     isManualDisconnectRef.current = false;
     clearReconnectTimeout();
+    clearConnectionTimeout();
+    clearIdleTimeout();
 
     if (adapterRef.current) {
       adapterRef.current.disconnect();
@@ -215,12 +263,30 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     setLastEventId(null);
     lastEventIdRef.current = null;
 
+    // Configura timeout de conexão
+    if (connectionTimeout && connectionTimeout > 0) {
+      connectionTimeoutRef.current = setTimeout(() => {
+        if (status === 'connecting') {
+          const timeoutError = new Error(`Connection timeout after ${connectionTimeout}ms`);
+          timeoutError.name = 'ConnectionTimeoutError';
+          setError(timeoutError);
+          onErrorRef.current?.(timeoutError);
+          
+          if (adapterRef.current) {
+            adapterRef.current.disconnect();
+          }
+        }
+      }, connectionTimeout);
+    }
+
     const adapterOptions = {
       url,
       events,
       headers,
       withCredentials,
       parser,
+      httpMethod,
+      body,
       callbacks: {
         ...createCallbacks(),
         onClose: () => {
@@ -241,11 +307,13 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
 
     adapterRef.current = adapter;
     adapter.connect();
-  }, [url, events, headers, withCredentials, parser, method, createCallbacks, clearReconnectTimeout, scheduleReconnect]);
+  }, [url, events, headers, withCredentials, parser, method, httpMethod, body, connectionTimeout, status, createCallbacks, clearReconnectTimeout, clearConnectionTimeout, clearIdleTimeout, scheduleReconnect]);
 
   const disconnect = useCallback(() => {
     isManualDisconnectRef.current = true;
     clearReconnectTimeout();
+    clearConnectionTimeout();
+    clearIdleTimeout();
 
     if (adapterRef.current) {
       adapterRef.current.disconnect();
@@ -253,7 +321,7 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     }
 
     setStatus('closed');
-  }, [clearReconnectTimeout]);
+  }, [clearReconnectTimeout, clearConnectionTimeout, clearIdleTimeout]);
 
   useEffect(() => {
     if (enabled) {
@@ -267,6 +335,28 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     };
   }, [enabled, url, method]);
 
+  useEffect(() => {
+    if (!signal) return;
+
+    const handleAbort = () => {
+      disconnect();
+    };
+
+    if (signal.aborted) {
+      handleAbort();
+      return;
+    }
+
+    signal.addEventListener('abort', handleAbort);
+    return () => {
+      signal.removeEventListener('abort', handleAbort);
+    };
+  }, [signal, disconnect]);
+
+  const readyState: 0 | 1 | 2 = 
+    status === 'connecting' || status === 'reconnecting' ? 0 :
+    status === 'connected' ? 1 : 2;
+
   return {
     data,
     status,
@@ -274,6 +364,7 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     lastEvent,
     lastEventId,
     retryCount,
+    readyState,
     connect,
     disconnect,
   };

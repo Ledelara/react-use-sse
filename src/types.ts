@@ -10,6 +10,31 @@ export type SSEStatus =
   | 'closed';
 
 /**
+ * Constantes de status SSE para comparações type-safe
+ * @example
+ * if (status === SSE_STATUS.CONNECTED) { ... }
+ */
+export const SSE_STATUS = {
+  IDLE: 'idle',
+  CONNECTING: 'connecting',
+  CONNECTED: 'connected',
+  RECONNECTING: 'reconnecting',
+  ERROR: 'error',
+  CLOSED: 'closed',
+} as const;
+
+/**
+ * Constantes de readyState compatíveis com EventSource
+ * @example
+ * if (readyState === SSE_READY_STATE.OPEN) { ... }
+ */
+export const SSE_READY_STATE = {
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSED: 2,
+} as const;
+
+/**
  * Método de conexão SSE
  * - native: Usa EventSource nativo (melhor suporte no DevTools, sem headers customizados)
  * - fetch: Usa fetch + ReadableStream (suporta headers customizados)
@@ -86,6 +111,47 @@ export interface UseSSEOptions<T> {
   parser?: (raw: string) => T;
 
   /**
+   * AbortSignal para cancelamento externo da conexão
+   * Quando o signal é abortado, a conexão é encerrada
+   * @example
+   * ```tsx
+   * const controller = new AbortController();
+   * const { data } = useSSE({ url: '/api/events', signal: controller.signal });
+   * // Para cancelar: controller.abort();
+   * ```
+   */
+  signal?: AbortSignal;
+
+  /**
+   * Método HTTP para a requisição (apenas com method: 'fetch')
+   * Útil para APIs que requerem POST (ex: Claude API, OpenAI streaming)
+   * @default 'GET'
+   */
+  httpMethod?: 'GET' | 'POST';
+
+  /**
+   * Body da requisição (apenas com method: 'fetch' e httpMethod: 'POST')
+   * Objetos são automaticamente convertidos para JSON
+   * @example { prompt: 'Hello', stream: true }
+   */
+  body?: string | object;
+
+  /**
+   * Timeout em ms para considerar falha na conexão inicial
+   * Se o servidor não responder dentro desse tempo, dispara erro
+   * @default undefined (sem timeout)
+   */
+  connectionTimeout?: number;
+
+  /**
+   * Timeout em ms sem receber mensagens para considerar conexão inativa
+   * Se nenhuma mensagem for recebida dentro desse tempo, reconecta
+   * Útil para detectar conexões "zumbis" que não fecharam corretamente
+   * @default undefined (sem timeout)
+   */
+  idleTimeout?: number;
+
+  /**
    * Callback chamado quando uma mensagem é recebida
    */
   onMessage?: (event: string, data: T) => void;
@@ -116,13 +182,28 @@ export interface UseSSEOptions<T> {
  * Retorno do hook useSSE
  */
 export interface UseSSEReturn<T> {
+  /** Último dado recebido */
   data: T | null;
+  /** Status atual da conexão */
   status: SSEStatus;
+  /** Erro atual (se houver) */
   error: Error | null;
+  /** Nome do último evento recebido */
   lastEvent: string | null;
+  /** ID do último evento recebido (se enviado pelo servidor) */
   lastEventId: string | null;
+  /** Número de tentativas de reconexão */
   retryCount: number;
+  /** 
+   * Estado da conexão compatível com EventSource.readyState
+   * - 0: CONNECTING
+   * - 1: OPEN
+   * - 2: CLOSED
+   */
+  readyState: 0 | 1 | 2;
+  /** Função para conectar manualmente */
   connect: () => void;
+  /** Função para desconectar manualmente */
   disconnect: () => void;
 }
 
@@ -172,5 +253,10 @@ export interface SSEAdapterOptions<T> {
   withCredentials?: boolean;
   parser: (raw: string) => T;
   callbacks: SSEAdapterCallbacks<T>;
+  /** ID do último evento recebido (para retomar conexão) */
   lastEventId?: string;
+  /** Método HTTP (apenas para fetch adapter) @default 'GET' */
+  httpMethod?: 'GET' | 'POST';
+  /** Body da requisição (apenas para fetch adapter com POST) */
+  body?: string | object;
 }
