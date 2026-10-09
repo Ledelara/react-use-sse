@@ -15,7 +15,7 @@ export type {
 } from './types';
 
 // Adapters (para uso avançado)
-export { createNativeAdapter, createFetchAdapter } from './adapters';
+export { createNativeAdapter, createFetchAdapter, SSEHttpError } from './adapters';
 
 // Utilitários (para uso avançado)
 export { parseSSEChunk, parseSSEEvent } from './utils/parse-sse';

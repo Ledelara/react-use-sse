@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createNativeAdapter } from '../src/adapters/native-adapter';
+import { createNativeAdapter, SSEHttpError } from '../src/adapters/native-adapter';
 
 describe('createNativeAdapter', () => {
   let callbacks: {
@@ -17,6 +17,13 @@ describe('createNativeAdapter', () => {
       onError: vi.fn(),
       onClose: vi.fn(),
     };
+
+    // Mock fetch for preflight validation
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+    });
   });
 
   afterEach(() => {
@@ -226,5 +233,184 @@ describe('createNativeAdapter', () => {
     expect(capturedUrl).toBe('/api/events');
     
     global.EventSource = originalEventSource;
+  });
+
+  describe('HTTP error handling', () => {
+    it('should call onError with SSEHttpError when endpoint returns 401', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+
+      const adapter = createNativeAdapter({
+        url: '/api/events',
+        events: ['message'],
+        parser: JSON.parse,
+        callbacks,
+      });
+
+      adapter.connect();
+
+      await vi.waitFor(() => {
+        expect(callbacks.onError).toHaveBeenCalledWith(
+          expect.any(SSEHttpError)
+        );
+      });
+
+      const error = callbacks.onError.mock.calls[0][0] as SSEHttpError;
+      expect(error.status).toBe(401);
+      expect(error.statusText).toBe('Unauthorized');
+      expect(error.message).toBe('HTTP error 401: Unauthorized');
+    });
+
+    it('should call onError with SSEHttpError when endpoint returns 404', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      });
+
+      const adapter = createNativeAdapter({
+        url: '/api/events',
+        events: ['message'],
+        parser: JSON.parse,
+        callbacks,
+      });
+
+      adapter.connect();
+
+      await vi.waitFor(() => {
+        expect(callbacks.onError).toHaveBeenCalledWith(
+          expect.any(SSEHttpError)
+        );
+      });
+
+      const error = callbacks.onError.mock.calls[0][0] as SSEHttpError;
+      expect(error.status).toBe(404);
+    });
+
+    it('should call onError with SSEHttpError when endpoint returns 500', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      const adapter = createNativeAdapter({
+        url: '/api/events',
+        events: ['message'],
+        parser: JSON.parse,
+        callbacks,
+      });
+
+      adapter.connect();
+
+      await vi.waitFor(() => {
+        expect(callbacks.onError).toHaveBeenCalledWith(
+          expect.any(SSEHttpError)
+        );
+      });
+
+      const error = callbacks.onError.mock.calls[0][0] as SSEHttpError;
+      expect(error.status).toBe(500);
+    });
+
+    it('should call onClose after HTTP error', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+      });
+
+      const adapter = createNativeAdapter({
+        url: '/api/events',
+        events: ['message'],
+        parser: JSON.parse,
+        callbacks,
+      });
+
+      adapter.connect();
+
+      await vi.waitFor(() => {
+        expect(callbacks.onClose).toHaveBeenCalled();
+      });
+    });
+
+    it('should call onError when fetch fails with network error', async () => {
+      global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+      const adapter = createNativeAdapter({
+        url: '/api/events',
+        events: ['message'],
+        parser: JSON.parse,
+        callbacks,
+      });
+
+      adapter.connect();
+
+      await vi.waitFor(() => {
+        expect(callbacks.onError).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Network error',
+          })
+        );
+      });
+    });
+
+    it('should validate endpoint with HEAD request using withCredentials', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      global.fetch = mockFetch;
+
+      const adapter = createNativeAdapter({
+        url: '/api/events',
+        events: ['message'],
+        withCredentials: true,
+        parser: JSON.parse,
+        callbacks,
+      });
+
+      adapter.connect();
+
+      await vi.waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          '/api/events',
+          expect.objectContaining({
+            method: 'HEAD',
+            credentials: 'include',
+          })
+        );
+      });
+    });
+
+    it('should not call onError if disconnect is called before validation completes', async () => {
+      global.fetch = vi.fn().mockImplementation(() => 
+        new Promise((resolve) => {
+          setTimeout(() => resolve({
+            ok: false,
+            status: 500,
+            statusText: 'Internal Server Error',
+          }), 100);
+        })
+      );
+
+      const adapter = createNativeAdapter({
+        url: '/api/events',
+        events: ['message'],
+        parser: JSON.parse,
+        callbacks,
+      });
+
+      adapter.connect();
+      adapter.disconnect();
+
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(callbacks.onError).not.toHaveBeenCalled();
+    });
   });
 });
