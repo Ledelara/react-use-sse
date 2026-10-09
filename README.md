@@ -1,8 +1,8 @@
-# @ledelara/use-sse
+# pulsevent
 
-[![npm version](https://img.shields.io/npm/v/@ledelara/use-sse.svg)](https://www.npmjs.com/package/@ledelara/use-sse)
-[![npm downloads](https://img.shields.io/npm/dm/@ledelara/use-sse.svg)](https://www.npmjs.com/package/@ledelara/use-sse)
-[![license](https://img.shields.io/npm/l/@ledelara/use-sse.svg)](https://github.com/Ledelara/react-use-sse/blob/main/LICENSE)
+[![npm version](https://img.shields.io/npm/v/pulsevent.svg)](https://www.npmjs.com/package/pulsevent)
+[![npm downloads](https://img.shields.io/npm/dm/pulsevent.svg)](https://www.npmjs.com/package/pulsevent)
+[![license](https://img.shields.io/npm/l/pulsevent.svg)](https://github.com/Ledelara/pulsevent/blob/main/LICENSE)
 
 React hook for consuming Server-Sent Events (SSE) with TypeScript support, auto-reconnection, and multiple adapter strategies.
 
@@ -26,21 +26,21 @@ React hook for consuming Server-Sent Events (SSE) with TypeScript support, auto-
 ## Installation
 
 ```bash
-npm install @ledelara/use-sse
+npm install pulsevent
 ```
 
 ```bash
-yarn add @ledelara/use-sse
+yarn add pulsevent
 ```
 
 ```bash
-pnpm add @ledelara/use-sse
+pnpm add pulsevent
 ```
 
 ## Quick Start
 
 ```tsx
-import { useSSE } from '@ledelara/use-sse';
+import { useSSE } from 'pulsevent';
 
 interface Notification {
   id: string;
@@ -120,7 +120,7 @@ interface ReconnectConfig {
 ### Constants
 
 ```typescript
-import { SSE_STATUS, SSE_READY_STATE } from '@ledelara/use-sse';
+import { SSE_STATUS, SSE_READY_STATE } from 'pulsevent';
 
 // Status constants
 if (status === SSE_STATUS.CONNECTED) { /* ... */ }
@@ -288,7 +288,7 @@ const { data } = useSSE<string>({
 Handle HTTP errors with detailed information:
 
 ```tsx
-import { useSSE, SSEHttpError } from '@ledelara/use-sse';
+import { useSSE, SSEHttpError } from 'pulsevent';
 
 const { data, error } = useSSE<Data>({
   url: '/api/events',
@@ -350,7 +350,7 @@ A drop-in replacement for the native `EventSource` that supports custom headers.
 - ❌ No automatic reconnection (must implement manually)
 
 ```tsx
-import { EventSourcePolyfill } from '@ledelara/use-sse';
+import { EventSourcePolyfill } from 'pulsevent';
 
 // Basic usage with headers
 const source = new EventSourcePolyfill('/api/events', {
@@ -455,7 +455,7 @@ app.get('/api/events', (req, res) => {
 For advanced use cases, you can use the adapters directly:
 
 ```typescript
-import { createNativeAdapter, createFetchAdapter } from '@ledelara/use-sse';
+import { createNativeAdapter, createFetchAdapter } from 'pulsevent';
 
 const adapter = createFetchAdapter({
   url: '/api/events',
@@ -480,7 +480,7 @@ adapter.disconnect();
 When you need full control over the connection lifecycle with custom headers:
 
 ```typescript
-import { EventSourcePolyfill } from '@ledelara/use-sse';
+import { EventSourcePolyfill } from 'pulsevent';
 
 class SSEClient {
   private source: EventSourcePolyfill | null = null;
@@ -535,7 +535,7 @@ class SSEClient {
 ### SSE Parser Utilities
 
 ```typescript
-import { parseSSEChunk, parseSSEEvent } from '@ledelara/use-sse';
+import { parseSSEChunk, parseSSEEvent } from 'pulsevent';
 
 const chunk = 'event: update\ndata: {"value": 42}\n\n';
 const events = parseSSEChunk(chunk);
@@ -549,7 +549,7 @@ Built-in support for GraphQL subscriptions over SSE (compatible with graphql-sse
 ### useGraphQLSubscription Hook
 
 ```tsx
-import { useGraphQLSubscription } from '@ledelara/use-sse';
+import { useGraphQLSubscription } from 'pulsevent';
 
 interface Message {
   messageAdded: {
@@ -633,7 +633,7 @@ const {
 For usage outside React or when you need more control:
 
 ```typescript
-import { GraphQLSSEClient } from '@ledelara/use-sse';
+import { GraphQLSSEClient } from 'pulsevent';
 
 const client = new GraphQLSSEClient({
   url: '/graphql',
