@@ -4,6 +4,14 @@
   "description": "React hook for Server-Sent Events (SSE) with TypeScript support, auto-reconnection, and multiple adapter strategies",
   "author": "Leandro de Lara <ledelara@github.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ledelara/pulsevent.git"
+  },
+  "homepage": "https://github.com/ledelara/pulsevent#readme",
+  "bugs": {
+    "url": "https://github.com/ledelara/pulsevent/issues"
+  },
   "keywords": [
     "react",
     "hook",
