@@ -68,7 +68,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     onReconnect,
   } = options;
 
-  // Se headers foi definido, força método fetch
   const method = headers ? 'fetch' : methodOption;
   const reconnectConfig = normalizeReconnectConfig(reconnectOption);
 
@@ -80,15 +79,37 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
   const [lastEventId, setLastEventId] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
+  // Refs
   const adapterRef = useRef<SSEAdapter | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectConfigRef = useRef<Required<SSEReconnectConfig>>(reconnectConfig);
   const retryCountRef = useRef(0);
   const isManualDisconnectRef = useRef(false);
+  const lastEventIdRef = useRef<string | null>(null);
+
+  // Refs para callbacks (evita recriação do adapter a cada render)
+  const onOpenRef = useRef(onOpen);
+  const onMessageRef = useRef(onMessage);
+  const onErrorRef = useRef(onError);
+  const onCloseRef = useRef(onClose);
+  const onReconnectRef = useRef(onReconnect);
+
+  // Atualiza refs quando callbacks mudam
+  useEffect(() => {
+    onOpenRef.current = onOpen;
+    onMessageRef.current = onMessage;
+    onErrorRef.current = onError;
+    onCloseRef.current = onClose;
+    onReconnectRef.current = onReconnect;
+  }, [onOpen, onMessage, onError, onClose, onReconnect]);
 
   useEffect(() => {
     reconnectConfigRef.current = reconnectConfig;
   }, [reconnectConfig]);
+
+  useEffect(() => {
+    lastEventIdRef.current = lastEventId;
+  }, [lastEventId]);
 
   const clearReconnectTimeout = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -96,6 +117,32 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
       reconnectTimeoutRef.current = null;
     }
   }, []);
+
+  const createCallbacks = useCallback(() => ({
+    onOpen: () => {
+      setStatus('connected');
+      setError(null);
+      retryCountRef.current = 0;
+      setRetryCount(0);
+      onOpenRef.current?.();
+    },
+    onMessage: (event: string, eventData: T, id?: string) => {
+      setData(eventData);
+      setLastEvent(event);
+      if (id) {
+        setLastEventId(id);
+        lastEventIdRef.current = id;
+      }
+      onMessageRef.current?.(event, eventData);
+    },
+    onError: (err: Error) => {
+      setError(err);
+      onErrorRef.current?.(err);
+    },
+    onClose: () => {
+      onCloseRef.current?.();
+    },
+  }), []);
 
   const scheduleReconnect = useCallback(() => {
     const config = reconnectConfigRef.current;
@@ -106,8 +153,8 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
       return;
     }
 
-    if (onReconnect) {
-      const shouldContinue = onReconnect(attempt);
+    if (onReconnectRef.current) {
+      const shouldContinue = onReconnectRef.current(attempt);
       if (shouldContinue === false) {
         setStatus('error');
         return;
@@ -120,55 +167,39 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     reconnectTimeoutRef.current = setTimeout(() => {
       retryCountRef.current += 1;
       setRetryCount(retryCountRef.current);
-      adapterRef.current?.connect();
+      
+      if (adapterRef.current) {
+        adapterRef.current.disconnect();
+      }
+      
+      const adapterOptions = {
+        url,
+        events,
+        headers,
+        withCredentials,
+        parser,
+        callbacks: {
+          ...createCallbacks(),
+          onClose: () => {
+            if (!isManualDisconnectRef.current && reconnectConfigRef.current.enabled) {
+              scheduleReconnect();
+            } else {
+              setStatus('closed');
+            }
+            onCloseRef.current?.();
+          },
+        },
+        lastEventId: lastEventIdRef.current ?? undefined,
+      };
+      
+      const adapter = method === 'native'
+        ? createNativeAdapter(adapterOptions)
+        : createFetchAdapter(adapterOptions);
+      
+      adapterRef.current = adapter;
+      adapter.connect();
     }, delay);
-  }, [onReconnect]);
-
-  const callbacks = useCallback(
-    () => ({
-      onOpen: () => {
-        setStatus('connected');
-        setError(null);
-        retryCountRef.current = 0;
-        setRetryCount(0);
-        onOpen?.();
-      },
-      onMessage: (event: string, eventData: T, id?: string) => {
-        setData(eventData);
-        setLastEvent(event);
-        if (id) setLastEventId(id);
-        onMessage?.(event, eventData);
-      },
-      onError: (err: Error) => {
-        setError(err);
-        onError?.(err);
-      },
-      onClose: () => {
-        if (!isManualDisconnectRef.current && reconnectConfigRef.current.enabled) {
-          scheduleReconnect();
-        } else {
-          setStatus('closed');
-        }
-        onClose?.();
-      },
-    }),
-    [onOpen, onMessage, onError, onClose, scheduleReconnect]
-  );
-
-  const createAdapter = useCallback(() => {
-    const adapterOptions = {
-      url,
-      events,
-      headers,
-      withCredentials,
-      parser,
-      callbacks: callbacks(),
-    };
-
-    return method === 'native'
-      ? createNativeAdapter(adapterOptions)
-      : createFetchAdapter(adapterOptions);
-  }, [url, events, headers, withCredentials, parser, method, callbacks]);
+  }, [url, events, headers, withCredentials, parser, method, createCallbacks]);
 
   const connect = useCallback(() => {
     isManualDisconnectRef.current = false;
@@ -180,11 +211,37 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
 
     setStatus('connecting');
     setError(null);
+    
+    setLastEventId(null);
+    lastEventIdRef.current = null;
 
-    const adapter = createAdapter();
+    const adapterOptions = {
+      url,
+      events,
+      headers,
+      withCredentials,
+      parser,
+      callbacks: {
+        ...createCallbacks(),
+        onClose: () => {
+          if (!isManualDisconnectRef.current && reconnectConfigRef.current.enabled) {
+            scheduleReconnect();
+          } else {
+            setStatus('closed');
+          }
+          onCloseRef.current?.();
+        },
+      },
+      lastEventId: undefined,
+    };
+
+    const adapter = method === 'native'
+      ? createNativeAdapter(adapterOptions)
+      : createFetchAdapter(adapterOptions);
+
     adapterRef.current = adapter;
     adapter.connect();
-  }, [createAdapter, clearReconnectTimeout]);
+  }, [url, events, headers, withCredentials, parser, method, createCallbacks, clearReconnectTimeout, scheduleReconnect]);
 
   const disconnect = useCallback(() => {
     isManualDisconnectRef.current = true;
@@ -208,7 +265,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEReturn<T> 
     return () => {
       disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, url, method]);
 
   return {

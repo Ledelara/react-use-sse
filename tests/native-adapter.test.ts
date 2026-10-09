@@ -58,7 +58,6 @@ describe('createNativeAdapter', () => {
 
     adapter.connect();
 
-    // Aguarda o setTimeout do mock
     await vi.advanceTimersByTimeAsync(10);
 
     expect(callbacks.onOpen).toHaveBeenCalled();
@@ -105,8 +104,6 @@ describe('createNativeAdapter', () => {
 
     adapter.connect();
 
-    // O mock do EventSource guarda withCredentials
-    // Verificamos que não lançou erro
     expect(adapter).toBeDefined();
   });
 
@@ -121,11 +118,113 @@ describe('createNativeAdapter', () => {
     adapter.connect();
     await vi.advanceTimersByTimeAsync(10);
 
-    // Conecta novamente
     adapter.connect();
     await vi.advanceTimersByTimeAsync(10);
 
-    // Deve ter chamado onOpen duas vezes
     expect(callbacks.onOpen).toHaveBeenCalledTimes(2);
+  });
+
+  it('should append lastEventId to URL as query parameter', async () => {
+    let capturedUrl = '';
+    
+    const originalEventSource = global.EventSource;
+    global.EventSource = vi.fn().mockImplementation((url) => {
+      capturedUrl = url;
+      return {
+        readyState: EventSource.OPEN,
+        close: vi.fn(),
+        onopen: null,
+        onerror: null,
+        onmessage: null,
+        addEventListener: vi.fn(),
+      };
+    }) as unknown as typeof EventSource;
+    
+    (global.EventSource as unknown as Record<string, number>).CONNECTING = 0;
+    (global.EventSource as unknown as Record<string, number>).OPEN = 1;
+    (global.EventSource as unknown as Record<string, number>).CLOSED = 2;
+
+    const adapter = createNativeAdapter({
+      url: '/api/events',
+      events: ['message'],
+      parser: JSON.parse,
+      callbacks,
+      lastEventId: 'event-456',
+    });
+
+    adapter.connect();
+
+    expect(capturedUrl).toBe('/api/events?lastEventId=event-456');
+    
+    global.EventSource = originalEventSource;
+  });
+
+  it('should append lastEventId with & when URL already has query params', async () => {
+    let capturedUrl = '';
+    
+    const originalEventSource = global.EventSource;
+    global.EventSource = vi.fn().mockImplementation((url) => {
+      capturedUrl = url;
+      return {
+        readyState: EventSource.OPEN,
+        close: vi.fn(),
+        onopen: null,
+        onerror: null,
+        onmessage: null,
+        addEventListener: vi.fn(),
+      };
+    }) as unknown as typeof EventSource;
+    
+    (global.EventSource as unknown as Record<string, number>).CONNECTING = 0;
+    (global.EventSource as unknown as Record<string, number>).OPEN = 1;
+    (global.EventSource as unknown as Record<string, number>).CLOSED = 2;
+
+    const adapter = createNativeAdapter({
+      url: '/api/events?channel=main',
+      events: ['message'],
+      parser: JSON.parse,
+      callbacks,
+      lastEventId: 'event-789',
+    });
+
+    adapter.connect();
+
+    expect(capturedUrl).toBe('/api/events?channel=main&lastEventId=event-789');
+    
+    global.EventSource = originalEventSource;
+  });
+
+  it('should not append lastEventId when not provided', async () => {
+    let capturedUrl = '';
+    
+    const originalEventSource = global.EventSource;
+    global.EventSource = vi.fn().mockImplementation((url) => {
+      capturedUrl = url;
+      return {
+        readyState: EventSource.OPEN,
+        close: vi.fn(),
+        onopen: null,
+        onerror: null,
+        onmessage: null,
+        addEventListener: vi.fn(),
+      };
+    }) as unknown as typeof EventSource;
+    
+    (global.EventSource as unknown as Record<string, number>).CONNECTING = 0;
+    (global.EventSource as unknown as Record<string, number>).OPEN = 1;
+    (global.EventSource as unknown as Record<string, number>).CLOSED = 2;
+
+    const adapter = createNativeAdapter({
+      url: '/api/events',
+      events: ['message'],
+      parser: JSON.parse,
+      callbacks,
+    });
+
+    adapter.connect();
+
+    expect(capturedUrl).toBe('/api/events');
+    
+    global.EventSource = originalEventSource;
   });
 });

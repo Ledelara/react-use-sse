@@ -29,7 +29,7 @@ import type { SSEAdapter, SSEAdapterOptions } from './types';
 export function createNativeAdapter<T>(
   options: SSEAdapterOptions<T>
 ): SSEAdapter {
-  const { url, events, withCredentials, parser, callbacks } = options;
+  const { url, events, withCredentials, parser, callbacks, lastEventId } = options;
 
   let eventSource: EventSource | null = null;
 
@@ -48,8 +48,14 @@ export function createNativeAdapter<T>(
     if (eventSource) {
       disconnect();
     }
+    
+    let connectionUrl = url;
+    if (lastEventId) {
+      const separator = url.includes('?') ? '&' : '?';
+      connectionUrl = `${url}${separator}lastEventId=${encodeURIComponent(lastEventId)}`;
+    }
 
-    eventSource = new EventSource(url, {
+    eventSource = new EventSource(connectionUrl, {
       withCredentials: withCredentials ?? false,
     });
 
