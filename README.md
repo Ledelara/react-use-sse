@@ -12,11 +12,14 @@ React hook for consuming Server-Sent Events (SSE) with TypeScript support, auto-
 - 🔄 **Auto-reconnection** - Configurable exponential backoff with jitter
 - 🔌 **Two connection modes**:
   - `native` - Uses EventSource (better DevTools support)
-  - `fetch` - Uses fetch + ReadableStream (supports custom headers)
+  - `fetch` - Uses fetch + ReadableStream (supports custom headers & POST)
 - 📝 **Full TypeScript support** - Generics for type-safe data
 - 🎯 **Custom events** - Listen to specific SSE event types
 - 🪶 **Zero dependencies** - Only React as peer dependency
 - ⚡ **Tree-shakeable** - Import only what you need
+- 🔁 **Resume support** - Sends `lastEventId` on reconnection
+- ⏱️ **Timeout handling** - Connection and idle timeouts
+- 🛑 **AbortController support** - External cancellation control
 
 ## Installation
 
@@ -71,6 +74,7 @@ const {
   lastEvent,   // Name of last event received
   lastEventId, // ID of last event (if sent by server)
   retryCount,  // Number of reconnection attempts
+  readyState,  // 0 (CONNECTING) | 1 (OPEN) | 2 (CLOSED) - EventSource compatible
   connect,     // Manual connect function
   disconnect,  // Manual disconnect function
 } = useSSE<T>(options);
@@ -88,6 +92,11 @@ const {
 | `withCredentials` | `boolean` | `false` | Send cookies (CORS) |
 | `reconnect` | `boolean \| ReconnectConfig` | `true` | Auto-reconnection settings |
 | `parser` | `(raw: string) => T` | `JSON.parse` | Custom data parser |
+| `signal` | `AbortSignal` | - | External abort signal for cancellation |
+| `httpMethod` | `'GET' \| 'POST'` | `'GET'` | HTTP method (fetch adapter only) |
+| `body` | `string \| object` | - | Request body (fetch adapter with POST) |
+| `connectionTimeout` | `number` | - | Timeout in ms for initial connection |
+| `idleTimeout` | `number` | - | Timeout in ms without messages |
 | `onMessage` | `(event, data) => void` | - | Message callback |
 | `onError` | `(error) => void` | - | Error callback |
 | `onOpen` | `() => void` | - | Connection opened callback |
@@ -106,6 +115,18 @@ interface ReconnectConfig {
 }
 ```
 
+### Constants
+
+```typescript
+import { SSE_STATUS, SSE_READY_STATE } from '@ledelara/use-sse';
+
+// Status constants
+if (status === SSE_STATUS.CONNECTED) { /* ... */ }
+
+// ReadyState constants (EventSource compatible)
+if (readyState === SSE_READY_STATE.OPEN) { /* ... */ }
+```
+
 ## Usage Examples
 
 ### With Authentication
@@ -117,6 +138,24 @@ const { data } = useSSE<Order>({
   url: '/api/orders/stream',
   headers: {
     Authorization: `Bearer ${token}`,
+  },
+});
+```
+
+### POST Request with Body (AI Streaming APIs)
+
+Perfect for streaming APIs like Claude, OpenAI, or similar:
+
+```tsx
+const { data, status } = useSSE<StreamChunk>({
+  url: '/api/chat/stream',
+  httpMethod: 'POST',
+  body: {
+    prompt: 'Hello, how are you?',
+    stream: true,
+  },
+  headers: {
+    Authorization: `Bearer ${apiKey}`,
   },
 });
 ```
@@ -158,6 +197,53 @@ return (
 );
 ```
 
+### With AbortController
+
+Control the connection externally:
+
+```tsx
+function StreamingComponent() {
+  const controllerRef = useRef(new AbortController());
+  
+  const { data, status } = useSSE<Message>({
+    url: '/api/stream',
+    signal: controllerRef.current.signal,
+  });
+
+  const handleCancel = () => {
+    controllerRef.current.abort();
+    controllerRef.current = new AbortController();
+  };
+
+  return (
+    <div>
+      <p>{data?.message}</p>
+      <button onClick={handleCancel}>Cancel</button>
+    </div>
+  );
+}
+```
+
+### With Timeouts
+
+Detect connection issues and zombie connections:
+
+```tsx
+const { data, status, error } = useSSE<HeartbeatData>({
+  url: '/api/heartbeat',
+  connectionTimeout: 5000,  // Fail if not connected in 5s
+  idleTimeout: 30000,       // Reconnect if no message in 30s
+  onError: (err) => {
+    if (err.name === 'ConnectionTimeoutError') {
+      console.log('Server took too long to respond');
+    }
+    if (err.name === 'IdleTimeoutError') {
+      console.log('Connection went idle');
+    }
+  },
+});
+```
+
 ### With Reconnection Config
 
 ```tsx
@@ -195,12 +281,33 @@ const { data } = useSSE<string>({
 });
 ```
 
+### Error Handling with SSEHttpError
+
+Handle HTTP errors with detailed information:
+
+```tsx
+import { useSSE, SSEHttpError } from '@ledelara/use-sse';
+
+const { data, error } = useSSE<Data>({
+  url: '/api/events',
+  onError: (err) => {
+    if (err instanceof SSEHttpError) {
+      console.log(`HTTP ${err.status}: ${err.statusText}`);
+      if (err.status === 401) {
+        // Redirect to login
+      }
+    }
+  },
+});
+```
+
 ## Connection Methods
 
 ### Native (EventSource)
 
 - ✅ Shows events in DevTools "EventStream" tab
 - ✅ Automatic reconnection by browser
+- ✅ Sends `lastEventId` via query parameter on reconnection
 - ❌ No custom headers support
 - ❌ GET method only
 
@@ -214,7 +321,8 @@ const { data } = useSSE({
 ### Fetch (ReadableStream)
 
 - ✅ Custom headers support (Authorization, etc.)
-- ✅ Full control over request
+- ✅ POST method with body support
+- ✅ Sends `Last-Event-ID` header on reconnection
 - ❌ No DevTools EventStream visibility
 - ❌ Manual reconnection
 
@@ -226,7 +334,38 @@ const { data } = useSSE({
 });
 ```
 
-> **Note:** When `headers` option is provided, `method` is automatically set to `'fetch'`.
+> **Note:** When `headers`, `httpMethod: 'POST'`, or `body` options are provided, `method` is automatically set to `'fetch'`.
+
+## Server-Side: Resuming with lastEventId
+
+When reconnecting, the hook sends the last received event ID so the server can resume from where it left off:
+
+- **Fetch adapter**: Sends `Last-Event-ID` header
+- **Native adapter**: Sends `?lastEventId=` query parameter
+
+### Server Example (Node.js/Express)
+
+```javascript
+app.get('/api/events', (req, res) => {
+  // Get lastEventId from header (fetch) or query param (native)
+  const lastEventId = req.headers['last-event-id'] || req.query.lastEventId;
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  if (lastEventId) {
+    // Client is reconnecting - send missed events
+    const missedEvents = getEventsSince(lastEventId);
+    missedEvents.forEach(event => {
+      res.write(`id: ${event.id}\n`);
+      res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+    });
+  }
+  
+  // Continue sending new events...
+});
+```
 
 ## Advanced Usage
 
@@ -272,6 +411,24 @@ const events = parseSSEChunk(chunk);
 - Safari 10+
 - Edge 79+
 
+## TypeScript Support
+
+Full TypeScript support with generics:
+
+```typescript
+interface MyEvent {
+  id: string;
+  type: 'create' | 'update' | 'delete';
+  payload: Record<string, unknown>;
+}
+
+const { data } = useSSE<MyEvent>({
+  url: '/api/events',
+});
+
+// data is typed as MyEvent | null
+```
+
 ## Contributing
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
@@ -279,4 +436,3 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 ## License
 
 MIT © Leandro de Lara
-

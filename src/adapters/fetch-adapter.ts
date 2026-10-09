@@ -6,7 +6,8 @@ import { parseSSEChunk } from '../utils/parse-sse';
  *
  * Vantagens:
  * - Suporta headers customizados (Authorization, etc.)
- * - Suporta diferentes métodos HTTP
+ * - Suporta diferentes métodos HTTP (GET, POST)
+ * - Suporta envio de body (útil para APIs de streaming como Claude/OpenAI)
  * - Maior controle sobre a requisição
  *
  * Limitações:
@@ -15,23 +16,41 @@ import { parseSSEChunk } from '../utils/parse-sse';
  *
  * @example
  * ```typescript
+ * // GET request
  * const adapter = createFetchAdapter({
  *   url: '/api/events',
- *   events: ['message', 'custom-event'],
+ *   events: ['message'],
  *   headers: { Authorization: 'Bearer xxx' },
  *   parser: JSON.parse,
  *   callbacks: { onOpen, onMessage, onError, onClose },
  * });
  *
- * adapter.connect();
- * // ...
- * adapter.disconnect();
+ * // POST request com body (ex: Claude API)
+ * const adapter = createFetchAdapter({
+ *   url: '/api/chat',
+ *   httpMethod: 'POST',
+ *   body: { prompt: 'Hello', stream: true },
+ *   headers: { Authorization: 'Bearer xxx' },
+ *   events: ['message'],
+ *   parser: JSON.parse,
+ *   callbacks: { onOpen, onMessage, onError, onClose },
+ * });
  * ```
  */
 export function createFetchAdapter<T>(
   options: SSEAdapterOptions<T>
 ): SSEAdapter {
-  const { url, events, headers, withCredentials, parser, callbacks, lastEventId } = options;
+  const { 
+    url, 
+    events, 
+    headers, 
+    withCredentials, 
+    parser, 
+    callbacks, 
+    lastEventId,
+    httpMethod = 'GET',
+    body,
+  } = options;
 
   let abortController: AbortController | null = null;
   let connected = false;
@@ -46,6 +65,29 @@ export function createFetchAdapter<T>(
     }
   };
 
+  const buildRequestBody = (): string | undefined => {
+    if (!body) return undefined;
+    if (typeof body === 'string') return body;
+    return JSON.stringify(body);
+  };
+
+  const buildHeaders = (): Record<string, string> => {
+    const baseHeaders: Record<string, string> = {
+      Accept: 'text/event-stream',
+      'Cache-Control': 'no-cache',
+    };
+
+    if (lastEventId) {
+      baseHeaders['Last-Event-ID'] = lastEventId;
+    }
+
+    if (httpMethod === 'POST' && body && typeof body === 'object') {
+      baseHeaders['Content-Type'] = 'application/json';
+    }
+
+    return { ...baseHeaders, ...headers };
+  };
+
   const connect = async () => {
     if (abortController) {
       disconnect();
@@ -55,13 +97,9 @@ export function createFetchAdapter<T>(
 
     try {
       const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Accept: 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          ...(lastEventId && { 'Last-Event-ID': lastEventId }),
-          ...headers,
-        },
+        method: httpMethod,
+        headers: buildHeaders(),
+        body: buildRequestBody(),
         credentials: withCredentials ? 'include' : 'same-origin',
         signal: abortController.signal,
       });
