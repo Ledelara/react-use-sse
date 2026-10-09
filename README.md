@@ -10,9 +10,10 @@ React hook for consuming Server-Sent Events (SSE) with TypeScript support, auto-
 
 - 🎣 **Simple React Hook** - Easy to use `useSSE` hook
 - 🔄 **Auto-reconnection** - Configurable exponential backoff with jitter
-- 🔌 **Two connection modes**:
+- 🔌 **Multiple connection strategies**:
   - `native` - Uses EventSource (better DevTools support)
   - `fetch` - Uses fetch + ReadableStream (supports custom headers & POST)
+  - `EventSourcePolyfill` - Drop-in EventSource replacement with headers support
 - 📝 **Full TypeScript support** - Generics for type-safe data
 - 🎯 **Custom events** - Listen to specific SSE event types
 - 🪶 **Zero dependencies** - Only React as peer dependency
@@ -336,6 +337,85 @@ const { data } = useSSE({
 
 > **Note:** When `headers`, `httpMethod: 'POST'`, or `body` options are provided, `method` is automatically set to `'fetch'`.
 
+### EventSourcePolyfill (Drop-in Replacement)
+
+A drop-in replacement for the native `EventSource` that supports custom headers. Use it when you need the familiar EventSource API but with authentication headers.
+
+- ✅ Same API as native EventSource
+- ✅ Custom headers support (Authorization, etc.)
+- ✅ POST method with body support
+- ✅ Sends `Last-Event-ID` header automatically
+- ❌ No DevTools EventStream visibility
+- ❌ No automatic reconnection (must implement manually)
+
+```tsx
+import { EventSourcePolyfill } from '@ledelara/use-sse';
+
+// Basic usage with headers
+const source = new EventSourcePolyfill('/api/events', {
+  headers: {
+    Authorization: 'Bearer my-token',
+  },
+});
+
+source.onopen = () => console.log('Connected');
+source.onmessage = (event) => console.log('Message:', event.data);
+source.onerror = () => console.log('Error');
+
+// Custom events
+source.addEventListener('notification', (event) => {
+  console.log('Notification:', event.data);
+});
+
+// Close when done
+source.close();
+```
+
+#### POST Request with Body
+
+```tsx
+const source = new EventSourcePolyfill('/api/chat/stream', {
+  method: 'POST',
+  headers: {
+    Authorization: 'Bearer my-token',
+    'X-Custom-Header': 'value',
+  },
+  body: {
+    prompt: 'Hello, how are you?',
+    stream: true,
+  },
+});
+
+source.onmessage = (event) => {
+  const chunk = JSON.parse(event.data);
+  console.log(chunk.text);
+};
+```
+
+#### EventSourcePolyfill Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `headers` | `Record<string, string>` | `{}` | Custom headers to send |
+| `withCredentials` | `boolean` | `false` | Send cookies (CORS) |
+| `method` | `'GET' \| 'POST'` | `'GET'` | HTTP method |
+| `body` | `string \| object` | - | Request body (for POST) |
+
+#### Properties and Methods
+
+| Property/Method | Description |
+|-----------------|-------------|
+| `url` | The URL of the SSE endpoint |
+| `readyState` | 0 (CONNECTING), 1 (OPEN), 2 (CLOSED) |
+| `withCredentials` | Whether credentials are sent |
+| `lastEventId` | ID of the last received event |
+| `onopen` | Callback when connection opens |
+| `onmessage` | Callback for message events |
+| `onerror` | Callback when error occurs |
+| `addEventListener(type, listener)` | Listen to custom events |
+| `removeEventListener(type, listener)` | Remove event listener |
+| `close()` | Close the connection |
+
 ## Server-Side: Resuming with lastEventId
 
 When reconnecting, the hook sends the last received event ID so the server can resume from where it left off:
@@ -392,6 +472,63 @@ const adapter = createFetchAdapter({
 adapter.connect();
 // ...
 adapter.disconnect();
+```
+
+### Using EventSourcePolyfill for Manual Control
+
+When you need full control over the connection lifecycle with custom headers:
+
+```typescript
+import { EventSourcePolyfill } from '@ledelara/use-sse';
+
+class SSEClient {
+  private source: EventSourcePolyfill | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+
+  connect(token: string) {
+    this.source = new EventSourcePolyfill('/api/events', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    this.source.onopen = () => {
+      this.reconnectAttempts = 0;
+      console.log('Connected');
+    };
+
+    this.source.onmessage = (event) => {
+      this.handleMessage(JSON.parse(event.data));
+    };
+
+    this.source.onerror = () => {
+      this.handleError();
+    };
+  }
+
+  private handleMessage(data: unknown) {
+    // Process message
+  }
+
+  private handleError() {
+    this.source?.close();
+    
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+      setTimeout(() => this.connect(this.getToken()), delay);
+    }
+  }
+
+  private getToken(): string {
+    // Get current token
+    return 'token';
+  }
+
+  disconnect() {
+    this.source?.close();
+    this.source = null;
+  }
+}
 ```
 
 ### SSE Parser Utilities
