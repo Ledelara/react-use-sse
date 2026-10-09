@@ -21,3 +21,15 @@ export {
   calculateRetryDelay,
   shouldRetry,
 } from './utils/retry';
+
+export { useGraphQLSubscription, GraphQLSSEClient } from './graphql';
+export type {
+  GraphQLError,
+  GraphQLResponse,
+  GraphQLSubscriptionOptions,
+  GraphQLSubscriptionReturn,
+  GraphQLSSEClientOptions,
+  SubscriptionOptions,
+  SubscriptionCallbacks,
+  Subscription,
+} from './graphql';

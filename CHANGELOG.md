@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2024-XX-XX
+
+### Added
+
+- **GraphQL Subscriptions Support**: New `useGraphQLSubscription` hook for GraphQL subscriptions over SSE
+  - Full TypeScript support with generics for typed responses
+  - Separate handling for GraphQL errors vs network errors
+  - Support for variables and operation names
+  - Auto-reconnection with configurable backoff
+  - Compatible with graphql-sse protocol (Yoga, Mercurius, etc.)
+- **`GraphQLSSEClient`**: Standalone client for GraphQL subscriptions outside React
+  - Subscribe/unsubscribe pattern
+  - Dynamic header management (`setHeaders`, `setHeader`, `removeHeader`)
+  - Callbacks for data, errors, and connection lifecycle
+
 ## [0.3.0] - 2024-XX-XX
 
 ### Added

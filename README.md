@@ -21,6 +21,7 @@ React hook for consuming Server-Sent Events (SSE) with TypeScript support, auto-
 - 🔁 **Resume support** - Sends `lastEventId` on reconnection
 - ⏱️ **Timeout handling** - Connection and idle timeouts
 - 🛑 **AbortController support** - External cancellation control
+- 🔷 **GraphQL Subscriptions** - Built-in support for GraphQL SSE subscriptions
 
 ## Installation
 
@@ -540,6 +541,144 @@ const chunk = 'event: update\ndata: {"value": 42}\n\n';
 const events = parseSSEChunk(chunk);
 // [{ event: 'update', data: { value: 42 } }]
 ```
+
+## GraphQL Subscriptions
+
+Built-in support for GraphQL subscriptions over SSE (compatible with graphql-sse protocol).
+
+### useGraphQLSubscription Hook
+
+```tsx
+import { useGraphQLSubscription } from '@ledelara/use-sse';
+
+interface Message {
+  messageAdded: {
+    id: string;
+    content: string;
+    author: { name: string };
+  };
+}
+
+function ChatMessages() {
+  const { data, errors, status, networkError } = useGraphQLSubscription<Message>({
+    url: '/graphql',
+    subscription: `
+      subscription OnMessageAdded($channelId: ID!) {
+        messageAdded(channelId: $channelId) {
+          id
+          content
+          author { name }
+        }
+      }
+    `,
+    variables: { channelId: '123' },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (networkError) return <div>Network error: {networkError.message}</div>;
+  if (errors) return <div>GraphQL error: {errors[0].message}</div>;
+
+  return (
+    <div>
+      <p>Status: {status}</p>
+      {data && (
+        <p>
+          {data.messageAdded.author.name}: {data.messageAdded.content}
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+### useGraphQLSubscription Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `url` | `string` | Required | GraphQL endpoint URL |
+| `subscription` | `string` | Required | GraphQL subscription query |
+| `variables` | `object` | - | GraphQL variables |
+| `operationName` | `string` | - | Operation name |
+| `headers` | `Record<string, string>` | - | Custom headers |
+| `withCredentials` | `boolean` | `false` | Send cookies (CORS) |
+| `reconnect` | `boolean \| ReconnectConfig` | `true` | Auto-reconnection settings |
+| `enabled` | `boolean` | `true` | Auto-connect on mount |
+| `signal` | `AbortSignal` | - | External abort signal |
+| `connectionTimeout` | `number` | - | Connection timeout in ms |
+| `idleTimeout` | `number` | - | Idle timeout in ms |
+| `onData` | `(data: T) => void` | - | Data received callback |
+| `onError` | `(errors: GraphQLError[]) => void` | - | GraphQL errors callback |
+| `onNetworkError` | `(error: Error) => void` | - | Network error callback |
+| `onOpen` | `() => void` | - | Connection opened callback |
+| `onClose` | `() => void` | - | Connection closed callback |
+| `onReconnect` | `(attempt: number) => boolean \| void` | - | Reconnection callback |
+
+### useGraphQLSubscription Return
+
+```typescript
+const {
+  data,         // Latest data received (typed)
+  errors,       // GraphQL errors array
+  status,       // 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'closed'
+  networkError, // Network/HTTP error
+  retryCount,   // Number of reconnection attempts
+  readyState,   // 0 (CONNECTING) | 1 (OPEN) | 2 (CLOSED)
+  connect,      // Manual connect function
+  disconnect,   // Manual disconnect function
+} = useGraphQLSubscription<T>(options);
+```
+
+### GraphQLSSEClient (Standalone)
+
+For usage outside React or when you need more control:
+
+```typescript
+import { GraphQLSSEClient } from '@ledelara/use-sse';
+
+const client = new GraphQLSSEClient({
+  url: '/graphql',
+  headers: { Authorization: 'Bearer token' },
+});
+
+const subscription = client.subscribe(
+  {
+    subscription: `
+      subscription {
+        messageAdded { id content }
+      }
+    `,
+    variables: { channelId: '123' },
+  },
+  {
+    onData: (data) => console.log('Data:', data),
+    onError: (errors) => console.error('GraphQL errors:', errors),
+    onNetworkError: (error) => console.error('Network error:', error),
+    onOpen: () => console.log('Connected'),
+    onClose: () => console.log('Disconnected'),
+  }
+);
+
+// Later: unsubscribe
+subscription.unsubscribe();
+```
+
+### GraphQLSSEClient Methods
+
+| Method | Description |
+|--------|-------------|
+| `subscribe(options, callbacks)` | Start a subscription, returns `{ unsubscribe }` |
+| `setHeaders(headers)` | Update all headers |
+| `setHeader(key, value)` | Set a single header |
+| `removeHeader(key)` | Remove a header |
+
+### Server Compatibility
+
+The GraphQL subscription support is compatible with servers implementing the graphql-sse protocol:
+
+- [graphql-yoga](https://the-guild.dev/graphql/yoga-server)
+- [graphql-sse](https://github.com/enisdenjo/graphql-sse)
+- [Mercurius](https://mercurius.dev/)
+- Any server supporting SSE transport for GraphQL
 
 ## Browser Support
 
