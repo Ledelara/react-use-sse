@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2024-XX-XX
+
+### Added
+
+- **`EventSourcePolyfill`**: Drop-in replacement for native EventSource with custom headers support
+  - Same familiar API as native EventSource (`onopen`, `onmessage`, `onerror`, `addEventListener`)
+  - Supports custom headers (Authorization, etc.)
+  - Supports POST method with body
+  - Sends `Last-Event-ID` header automatically
+  - Exposes `readyState` and `lastEventId` properties
+
 ## [0.2.0] - 2024-XX-XX
 
 ### Added
