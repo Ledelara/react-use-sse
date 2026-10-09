@@ -137,14 +137,17 @@ describe('createNativeAdapter', () => {
     const originalEventSource = global.EventSource;
     global.EventSource = vi.fn().mockImplementation((url) => {
       capturedUrl = url;
-      return {
-        readyState: EventSource.OPEN,
+      const mockES = {
+        readyState: 1, // OPEN
         close: vi.fn(),
-        onopen: null,
+        onopen: null as (() => void) | null,
         onerror: null,
         onmessage: null,
         addEventListener: vi.fn(),
       };
+      // Simula onopen após criação
+      setTimeout(() => mockES.onopen?.(), 0);
+      return mockES;
     }) as unknown as typeof EventSource;
     
     (global.EventSource as unknown as Record<string, number>).CONNECTING = 0;
@@ -161,7 +164,10 @@ describe('createNativeAdapter', () => {
 
     adapter.connect();
 
-    expect(capturedUrl).toBe('/api/events?lastEventId=event-456');
+    // Aguarda o preflight fetch e a criação do EventSource
+    await vi.waitFor(() => {
+      expect(capturedUrl).toBe('/api/events?lastEventId=event-456');
+    });
     
     global.EventSource = originalEventSource;
   });
@@ -172,14 +178,16 @@ describe('createNativeAdapter', () => {
     const originalEventSource = global.EventSource;
     global.EventSource = vi.fn().mockImplementation((url) => {
       capturedUrl = url;
-      return {
-        readyState: EventSource.OPEN,
+      const mockES = {
+        readyState: 1,
         close: vi.fn(),
-        onopen: null,
+        onopen: null as (() => void) | null,
         onerror: null,
         onmessage: null,
         addEventListener: vi.fn(),
       };
+      setTimeout(() => mockES.onopen?.(), 0);
+      return mockES;
     }) as unknown as typeof EventSource;
     
     (global.EventSource as unknown as Record<string, number>).CONNECTING = 0;
@@ -196,7 +204,9 @@ describe('createNativeAdapter', () => {
 
     adapter.connect();
 
-    expect(capturedUrl).toBe('/api/events?channel=main&lastEventId=event-789');
+    await vi.waitFor(() => {
+      expect(capturedUrl).toBe('/api/events?channel=main&lastEventId=event-789');
+    });
     
     global.EventSource = originalEventSource;
   });
@@ -207,14 +217,16 @@ describe('createNativeAdapter', () => {
     const originalEventSource = global.EventSource;
     global.EventSource = vi.fn().mockImplementation((url) => {
       capturedUrl = url;
-      return {
-        readyState: EventSource.OPEN,
+      const mockES = {
+        readyState: 1,
         close: vi.fn(),
-        onopen: null,
+        onopen: null as (() => void) | null,
         onerror: null,
         onmessage: null,
         addEventListener: vi.fn(),
       };
+      setTimeout(() => mockES.onopen?.(), 0);
+      return mockES;
     }) as unknown as typeof EventSource;
     
     (global.EventSource as unknown as Record<string, number>).CONNECTING = 0;
@@ -230,7 +242,9 @@ describe('createNativeAdapter', () => {
 
     adapter.connect();
 
-    expect(capturedUrl).toBe('/api/events');
+    await vi.waitFor(() => {
+      expect(capturedUrl).toBe('/api/events');
+    });
     
     global.EventSource = originalEventSource;
   });

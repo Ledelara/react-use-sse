@@ -129,8 +129,12 @@ describe('useSSE', () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    it('should not call fetch when using native method without headers', () => {
-      const mockFetch = vi.fn();
+    it('should call fetch for preflight validation when using native method', () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      });
       global.fetch = mockFetch;
 
       renderHook(() =>
@@ -140,8 +144,13 @@ describe('useSSE', () => {
         })
       );
 
-      // Fetch should NOT be called for native method
-      expect(mockFetch).not.toHaveBeenCalled();
+      // Native adapter now uses fetch for preflight validation (HEAD request)
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/events',
+        expect.objectContaining({
+          method: 'HEAD',
+        })
+      );
     });
   });
 
