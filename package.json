@@ -1,6 +1,6 @@
 {
   "name": "@ledelara/use-sse",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "React hook for Server-Sent Events (SSE) with TypeScript support, auto-reconnection, and multiple adapter strategies",
   "author": "Leandro de Lara <ledelara@github.com>",
   "license": "MIT",
