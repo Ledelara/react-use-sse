@@ -116,28 +116,13 @@ export interface UseSSEOptions<T> {
  * Retorno do hook useSSE
  */
 export interface UseSSEReturn<T> {
-  /** Último dado recebido */
   data: T | null;
-
-  /** Status atual da conexão */
   status: SSEStatus;
-
-  /** Erro atual (se houver) */
   error: Error | null;
-
-  /** Nome do último evento recebido */
   lastEvent: string | null;
-
-  /** ID do último evento recebido (se enviado pelo servidor) */
   lastEventId: string | null;
-
-  /** Número de tentativas de reconexão */
   retryCount: number;
-
-  /** Função para conectar manualmente */
   connect: () => void;
-
-  /** Função para desconectar manualmente */
   disconnect: () => void;
 }
 
@@ -162,13 +147,8 @@ export interface SSEEvent<T = unknown> {
  * Interface comum para os adapters de conexão
  */
 export interface SSEAdapter {
-  /** Conecta ao endpoint SSE */
   connect: () => void;
-
-  /** Desconecta do endpoint SSE */
   disconnect: () => void;
-
-  /** Verifica se está conectado */
   isConnected: () => boolean;
 }
 
@@ -192,4 +172,5 @@ export interface SSEAdapterOptions<T> {
   withCredentials?: boolean;
   parser: (raw: string) => T;
   callbacks: SSEAdapterCallbacks<T>;
+  lastEventId?: string;
 }

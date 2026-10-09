@@ -31,7 +31,7 @@ import { parseSSEChunk } from '../utils/parse-sse';
 export function createFetchAdapter<T>(
   options: SSEAdapterOptions<T>
 ): SSEAdapter {
-  const { url, events, headers, withCredentials, parser, callbacks } = options;
+  const { url, events, headers, withCredentials, parser, callbacks, lastEventId } = options;
 
   let abortController: AbortController | null = null;
   let connected = false;
@@ -59,6 +59,7 @@ export function createFetchAdapter<T>(
         headers: {
           Accept: 'text/event-stream',
           'Cache-Control': 'no-cache',
+          ...(lastEventId && { 'Last-Event-ID': lastEventId }),
           ...headers,
         },
         credentials: withCredentials ? 'include' : 'same-origin',
@@ -79,10 +80,11 @@ export function createFetchAdapter<T>(
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let done = false;
 
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const { done, value } = await reader.read();
+      while (!done) {
+        const result = await reader.read();
+        done = result.done;
 
         if (done) {
           if (buffer.trim()) {
@@ -93,7 +95,7 @@ export function createFetchAdapter<T>(
           break;
         }
 
-        buffer += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(result.value, { stream: true });
 
         const parts = buffer.split(/\n\n/);
 

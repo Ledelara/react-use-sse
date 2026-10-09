@@ -268,4 +268,63 @@ describe('createFetchAdapter', () => {
       );
     });
   });
+
+  it('should send Last-Event-ID header when lastEventId is provided', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        }),
+      },
+    });
+    global.fetch = mockFetch;
+
+    const adapter = createFetchAdapter({
+      url: '/api/events',
+      events: ['message'],
+      parser: JSON.parse,
+      callbacks,
+      lastEventId: 'event-123',
+    });
+
+    adapter.connect();
+
+    await vi.waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/events',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Last-Event-ID': 'event-123',
+          }),
+        })
+      );
+    });
+  });
+
+  it('should not send Last-Event-ID header when lastEventId is not provided', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        }),
+      },
+    });
+    global.fetch = mockFetch;
+
+    const adapter = createFetchAdapter({
+      url: '/api/events',
+      events: ['message'],
+      parser: JSON.parse,
+      callbacks,
+    });
+
+    adapter.connect();
+
+    await vi.waitFor(() => {
+      const callHeaders = mockFetch.mock.calls[0][1].headers;
+      expect(callHeaders['Last-Event-ID']).toBeUndefined();
+    });
+  });
 });
